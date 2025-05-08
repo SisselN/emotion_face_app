@@ -4,14 +4,12 @@ The Audience Emotion Analyzer analyzes a video and tries to detect faces in a cr
 
 The app might be a little slow to start the first time, but the model is cached using `st.cache_resource` so the following runs should be faster as long as you don't restart the app.
 
-The model is uploaded at HuggingFace: https://huggingface.co/SisselN/model1_dl
-
 ## Files
 `requirements.txt` is a file to install the necessary Python libraries with `pip -r`.
 
 `haarcascade_frontalface_default.xml` is the model for OpenCV to detect faces.
 
-`modelv1.keras` is a model trained to classify emotions. (It isn't very good at it, unfortunately.)
+`modelv1.keras` is a model trained to classify emotions. (It isn't very good at it, unfortunately.) The model is uploaded at HuggingFace: https://huggingface.co/SisselN/model1_dl
 
 `app.py` is a `streamlit` app where a user can upload a video and have it analyzed.
 
