@@ -1,11 +1,9 @@
 import streamlit as st
 import keras
 
-from src.analyzer import Analyzer
+from src.analyzer import analyze
 
 keras.config.disable_interactive_logging()
-
-a = Analyzer()
 
 if "done" not in st.session_state:
     st.session_state.done = False
@@ -25,15 +23,15 @@ def load_model():
 
 def analyze():
     with st.spinner("Analyzing..."):
-        st.session_state.faces = []
         model = load_model()
-        st.session_state.done, st.session_state.results = a.analyze(
+        st.session_state.results = analyze(
             file=file,
             model=model,
             skip=skip,
             confidence=confidence,
-            show_screenshots=True
+            show_faces=True
         )
+        st.session_state.done = True
 
 st.title("Audience emotion analyzer")
 

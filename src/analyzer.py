@@ -7,83 +7,59 @@ import skimage as ski
 import av
 import streamlit as st
 
-
 emotion_labels = list(map(str.lower, ['Angry','Disgust','Fear','Happy','Neutral', 'Sad', 'Surprise']))
 
-class Analyzer:
-    """ Audience Emotion Analyzer class """
-    def __init__(self) -> None:
-        self.detector = cv2.CascadeClassifier('./haarcascade_frontalface_default.xml')
-        self.results = pd.DataFrame(columns=["frame"] + emotion_labels + ["x", "y", "width", "height"])
-        self.preprocessed_faces = []
+def load_face_detector(cascade_path = './haarcascade_frontalface_default.xml'):
+     return cv2.CascadeClassifier(cascade_path)
 
-    def analyze(self, 
-        model = None,
-        file: 'UploadedFile' | None = None, 
-        skip: int | None = 1,
-        confidence: float | None = .5,
-        show_screenshots: bool = False,
-        ) -> tuple[bool, pd.DataFrame]:
+def initialize_results_df():
+     return pd.DataFrame(columns=["frame"] + emotion_labels + ["x", "y", "width", "height"])
 
-        """ Analyze video in file """
-        # Check for file
-        if file is None:
-            raise ValueError('Must have a file to analyze.')
+def preprocess_face(face_region):
+     resized = ski.transform.resize(face_region, (48, 48))
+     normalized = resized.astype('float32') / 255.0
+     array = keras.utils.img_to_array(normalized)
+     return np.expand_dims(array, axis=0)
 
-        # Load video and get properties
-        container = av.open(file, mode="r")
-        stream = container.streams.video[0]
+def predict_emotion(model, face, threshold=0.5):
+     prediction = model.predict(face, verbose=0)[0]
+     return prediction > threshold
 
-        i = 0
+def append_results(df, frame_index, prediction, x, y, w, h):
+     if prediction.sum() > 0:
+          data = np.concatenate([[frame_index], prediction, [x, y, w, h]])
+          row = pd.Series(data, index=df.columns)
+          return pd.concat([df, row.to_frame().T])
+     return df
 
-        for i, frame in enumerate(container.decode(stream)):
-            # Convert to grayscale for cv
-            gray = frame.to_ndarray()
-            frame = frame.to_rgb().to_ndarray()
+def analyze(file, model, skip=1, confidence=0.5, show_faces=False):
+    detector = load_face_detector()
+    results_df = initialize_results_df()
+    screenshots = []
 
-            # Detect faces
-            faces = self.detector.detectMultiScale(gray)
+    container = av.open(file, mode='r')
+    stream = container.streams.video[0]
 
-            # Classify emotions in detected faces
-            for face in faces:
-                x, y, width, height = face
-            
-                # Preprocess detected face pt. I 
-                roi_gray = gray[y:y+height, x:x+width]
-                roi_gray = ski.transform.resize(roi_gray, (48, 48))
-                    
-                if (i % skip == 0) & (np.sum([roi_gray]) != 0):
-                    if show_screenshots:
-                        self.preprocessed_faces.append(roi_gray)
+    for i, frame in enumerate(container.decode(stream)):        
+            rgb = frame.to_rgb().to_ndarray()
+            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+            faces = detector.detectMultiScale(gray)
 
-                    # Preprocess detected face pt. II
-                    roi = roi_gray.astype('float') / 255.0
-                    roi = keras.utils.img_to_array(roi)
-                    roi = np.expand_dims(roi, axis=0)
-                    roi = tf.convert_to_tensor(roi)
+            for (x, y, w, h) in faces:
+                roi = gray[y:y+h, x:x+w]
 
-                    # Predict emotion
-                    prediction = model.predict(roi, verbose = 0)[0] > confidence
+                if i % skip == 0 and np.sum(roi) !=0:
+                    face = tf.convert_to_tensor(preprocess_face(roi))
+                    prediction = predict_emotion(model, face, threshold=confidence)
 
-                    # Check for confident prediction, add to results
-                    if sum(prediction > 0):
-                        frame_results = pd.Series(
-                            np.concatenate([[i],  
-                                            prediction, 
-                                            [x, y, width, height]]), 
-                                            index=self.results.columns)
-                        self.results = pd.concat([self.results, frame_results.to_frame().T])
+                    results_df = append_results(results_df, i, prediction, x, y, w, h)
 
-            i += 1
-        
-        if show_screenshots:
-            st.image(
-                self.preprocessed_faces, 
-                caption=[f"Face {i}" for i in range(len(self.preprocessed_faces))], 
-                clamp=True
-            )
+                    if show_faces:
+                        screenshots.append(roi)
 
+    container.close()
+    
+    if show_faces:
+        st.image(screenshots, caption=[f"Face {i}" for i in range(len(screenshots))], clamp=True)
 
-        container.close()
-
-        return True, self.results
+    return results_df
